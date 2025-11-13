@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// One user can have many blog.
+/// But one blog belongs to exactly one user.
+/// This is one-to-many relationship.
+
+model User{
+  id                         String                    @id @default(cuid())   /// Primary key - auto increment.
+  username                   String                    @unique
+  email                      String                    @unique
+  password                   String 
+  bio                        String?
+  avatarUrl                  String?
+  otp                        String?
+  otpExpiresAt               DateTime?
+  isEmailVerified            Boolean                   @default(false)
+  resetToken                 String?
+  resetTokenExpiresAt        DateTime?
+  blogs                      Blog[]                     /// 1-to-many relationship -> one user can write many blogs.
+  comments                   Comment[]                  /// one user can post many comments.
+  likes                      Like[]                     /// one user can like many blogs.
+  sendMessage                Chat[]                     @relation("sentMessages")
+  receiveMessage             Chat[]                     @relation("receiveMessage")
+  createdAt                  DateTime                   @default(now())    /// Timestamp when user was created.
+  updatedAt                  DateTime                   @updatedAt         /// Auto-update on record changes.
+}
+
+model Blog {
+  id                         String                     @id @default(cuid())
+  title                      String
+  slug                       String                     @unique
+  content                    String
+  imageUrl                   String?
+  published                  Boolean                    @default(false)
+  userId                     String                        /// foreign key -> User who wrote this blog.
+  user                       User                       @relation(fields: [userId], references: [id])    ///Prisma relation to User model.
+  comments                   Comment[]                  /// one blog can have many comments.
+  likes                      Like[]                     /// one blog can have many likes.     
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+
+
+  /// It tells prisma (and our database (e.g) PostgresSQL) to create an index on the userId column.
+  /// An index is a lookup table that helps the database find the data faster.
+  /// Without an index, the database must scan every single row to find the matches (called a full table scan).
+  @@index([userId])
+}
+
+model Comment {
+  id                         String                      @id @default(cuid())
+  content                    String
+  blogId                     String                         /// FK -> Blog being commented on.
+  userId                     String                         /// FK -> User who made the comment.
+  blog                       Blog                        @relation(fields: [blogId], references: [id])   /// Prisma Relation.
+  user                       User                        @relation(fields: [userId], references: [id])   /// Prisma Relation.
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+
+  @@index([blogId, userId])
+}
+
+model Like {
+  id                         String                      @id @default(cuid())
+  blogId                     String
+  userId                     String
+  blog                       Blog                        @relation(fields: [blogId], references: [id])
+  user                       User                        @relation(fields: [userId], references: [id])
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+
+  @@index([blogId, userId])
+}
+
+model Chat{
+  id                         String                       @id @default(cuid())
+  senderId                   String
+  receiverId                 String
+  message                    String
+  read                       Boolean                      @default(false)
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime                     @updatedAt
+  sender                     User                         @relation("sentMessages", fields: [senderId], references: [id])
+  receiver                   User                         @relation("receiveMessage", fields: [receiverId], references: [id])
+
+  @@index([senderId, receiverId])
+}
