@@ -9,7 +9,14 @@ const prisma = new PrismaClient();
 // @route GET /api/getAllBlogs
 // @access Public
 const getAllBlogs = asyncHandler(async (req, res) => {
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
   const blogs = await prisma.blog.findMany({
+    skip,
+    take: limit,
     include: {
       user: {
         select: {
@@ -28,7 +35,19 @@ const getAllBlogs = asyncHandler(async (req, res) => {
     },
     orderBy: { createdAt: "desc" },
   });
-  return successResponse(res, 200, "Blogs fetched successfully", blogs);
+
+  const totalBlogs = await prisma.blog.count();
+
+  return successResponse(res, 200, "Blogs fetched successfully", {
+    blogs, pagination: {
+      page,
+      limit,
+      totalBlogs,
+      totalPages: Math.ceil(totalBlogs / 10),
+      hasNextPage: page * limit < totalBlogs,
+      hasPreviousPage: page > 1
+    }
+  });
 });
 
 // @desc Post blog posts
@@ -115,9 +134,9 @@ const updateBlog = asyncHandler(async (req, res) => {
     {
       where: { id: id },
       data: {
-        ...(title && {title}),
-        ...(content && {content}),
-        ...(imageUrl && {imageUrl}),
+        ...(title && { title }),
+        ...(content && { content }),
+        ...(imageUrl && { imageUrl }),
       }
     }
   );
@@ -133,16 +152,16 @@ const deleteBlog = asyncHandler(async (req, res) => {
 
   const blog = await prisma.blog.findUnique({ where: { id: id } });
 
-  if(!blog) throw new ApiError(404, "Blog not found");
+  if (!blog) throw new ApiError(404, "Blog not found");
 
   if (blog.userId != req.user.id) {
     throw new ApiError(403, "user don't have permission to delete other blogs");
   }
 
-  await prisma.comment.deleteMany({where: {blogId: id}});
-  await prisma.like.deleteMany({where: {blogId: id}});
+  await prisma.comment.deleteMany({ where: { blogId: id } });
+  await prisma.like.deleteMany({ where: { blogId: id } });
   await prisma.blog.delete({ where: { id: id } });
-  return successResponse(res, 200, "Blog deleted successfully", {id: req.params.id });
+  return successResponse(res, 200, "Blog deleted successfully", { id: req.params.id });
 });
 
 module.exports = { getAllBlogs, postBlog, getBlog, updateBlog, deleteBlog };
