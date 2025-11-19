@@ -5,6 +5,7 @@ const { PrismaClient } = require("@prisma/client");
 const successResponse = require("../../utils/successResponse");
 const ApiError = require("../../utils/apiError");
 const sendOtpFunc = require("../../utils/sendOtpUtils");
+const { when } = require("joi");
 
 
 const prisma = new PrismaClient();
@@ -25,6 +26,7 @@ const register = asyncHandler(async (req, res) => {
     if (missingFields.length > 0) {
         throw new ApiError(400, "Missing required fields", `${missingFields} is required`);
     }
+    
 
     const userAvailable = await prisma.user.findFirst({
         where: { email: email }
@@ -153,7 +155,7 @@ const sendOtp = asyncHandler(async (req, res) => {
 });
 
 
-// @desc Get all blog posts
+// @desc Get User Profile.
 // @route GET /api/user/profile
 // @access Private
 const profile = asyncHandler(async (req, res) => {
@@ -197,7 +199,7 @@ const profile = asyncHandler(async (req, res) => {
     });
 });
 
-// @desc Register User
+// @desc Verify User.
 // @route POST /api/user/verify
 // @access Public
 const verify = asyncHandler(async (req, res) => {
@@ -230,20 +232,81 @@ const verify = asyncHandler(async (req, res) => {
 
 
 // @desc Forgot Password
-// @route POST /api/user/forgotPassword
+// @route PUT /api/user/forgotPassword
 // @access Public
 const forgotPassword = asyncHandler(async (req, res) => {
-    res.json(req.user);
+    const { email } = req.body;
+
+    if (!email) throw new ApiError(400, "email is required");
+
+    const user = await prisma.user.findUnique({where: {email: email}});
+
+    if(!user) throw new ApiError(400, "user is not registered");
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await prisma.user.update({
+        where: {email: email},
+        data:{
+            otp,
+            otpExpiresAt,
+        }
+    });
+
+    await sendOtpFunc.sendOtpEmail(email, otp);
+
+    return successResponse(res, 200, "Reset otp sent successfully", {
+        email: email,
+    });
 });
 
 
 // @desc Reset Password
-// @route POST /api/user/resetPassword
+// @route PUT /api/user/resetPassword
 // @access Public
 const resetPassword = asyncHandler(async (req, res) => {
-    res.json(req.user);
+    const { email, otp, newPassword } = req.body;
+
+    if (!req.body || Object.keys(req.body).length == 0) throw new ApiError(400, "Body is required");
+
+    const missingFields = [];
+
+    if(!email) missingFields.push('email');
+    if(!otp) missingFields.push('otp');
+    if(!newPassword) missingFields.push('newPassword');
+
+    if (missingFields.length > 0){
+        throw new ApiError(400, `${missingFields.join(', ')} is required`);
+    }
+
+    const user = await prisma.user.findUnique({where: {email: email}});
+
+    if(!user) throw new ApiError(400, "user is not registered");
+
+    if(user.otp != otp) throw new ApiError(400, "Invalid otp");
+
+    if(user.otpExpiresAt < Date.now()) throw new ApiError(400, "Otp expires");
+
+    const hashPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+        where: {email: email},
+        data:{
+            password: hashPassword,
+            otp: null,
+            otpExpiresAt: null,
+        },
+
+    });
+
+    return successResponse(res, 200, "password reset successfully");
 });
 
+
+// @desc Update Profile
+// @route POST /api/user/profile
+// @access Public
 const updateProfile = asyncHandler(async (req, res) => {
     const userId = req.user.id;
 

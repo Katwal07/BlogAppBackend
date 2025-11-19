@@ -12,7 +12,7 @@ const getAllBlogs = asyncHandler(async (req, res) => {
   const blogs = await prisma.blog.findMany({
     include: {
       user: {
-        select:{
+        select: {
           id: true,
           username: true,
           email: true,
@@ -20,26 +20,26 @@ const getAllBlogs = asyncHandler(async (req, res) => {
         }
       },
       _count: {
-        select:{
+        select: {
           comments: true,
           likes: true,
         }
       }
     },
-    orderBy:{createdAt: "desc"},
+    orderBy: { createdAt: "desc" },
   });
-  successResponse(res, 200, "Blogs fetched successfully", blogs);
+  return successResponse(res, 200, "Blogs fetched successfully", blogs);
 });
 
 // @desc Post blog posts
 // @route POST /api/blogs
 // @access Private
 const postBlog = asyncHandler(async (req, res) => {
-  const userId  = req.user.id;
+  const userId = req.user.id;
   const { title, content } = req.body;
 
   if (!userId) throw new ApiError(401, "User not authenticated");
-  
+
   if (!req.body || Object.keys(req.body).length === 0) {
     throw new ApiError(400, "Req body is required");
   }
@@ -52,10 +52,10 @@ const postBlog = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Failed", `${missingFields} is required`);
   }
 
-  const slug = title.toLowerCase().replace(/\s+/g, "-") + "_"+ Date.now();
+  const slug = title.toLowerCase().replace(/\s+/g, "-") + "_" + Date.now();
 
   const newBlog = await prisma.blog.create({
-    data:{
+    data: {
       title,
       slug,
       content,
@@ -65,7 +65,7 @@ const postBlog = asyncHandler(async (req, res) => {
     }
   });
 
-  successResponse(res, 201, "Blog created successfully", newBlog);
+  return successResponse(res, 201, "Blog created successfully", newBlog);
 });
 
 // @desc Get individual blog posts
@@ -73,19 +73,18 @@ const postBlog = asyncHandler(async (req, res) => {
 // @access Private
 const getBlog = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const blog = await prisma.blog.findUnique({ where: { id: parseInt(id) } });
 
-  if (!blog) {
-    res.status(404);
-    throw new Error("Blog post not found");
+  if (!id) throw new ApiError(400, "No blog id");
+
+  const blog = await prisma.blog.findUnique({ where: { id: id } });
+
+  if (!blog) throw new ApiError(400, "Blog not found")
+
+  if (blog.userId != req.user.id) {
+    throw new ApiError(403, "user don't have permission to get other blog");
   }
 
-  if (blog.userId.toString() != req.user.id) {
-    res.status(403);
-    throw new Error("user don't have permission to get other blog");
-  }
-
-  res.status(200).json(blog);
+  return successResponse(res, 200, "blog fetched successfully", blog);
 });
 
 // @desc Update blog posts
@@ -93,35 +92,36 @@ const getBlog = asyncHandler(async (req, res) => {
 // @access Private
 const updateBlog = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone } = req.body;
-  const blog = await prisma.blog.findUnique({ where: { id: parseInt(id) } });
+
+  if (!id) throw new ApiError(400, "Invalid blog id");
+
+  if (!req.body || Object.keys(req.body).length === 0) {
+    throw new ApiError(400, "No data provided for update");
+  }
+
+  const { title, content, imageUrl, } = req.body;
+
+  const blog = await prisma.blog.findUnique({ where: { id: id } });
 
   if (!blog) {
-    res.status(404);
-    throw new Error("Blog post not found");
+    throw new ApiError(404, "Blog post not found");
   }
 
-  if (!req.body || Object.keys(req.body).length == 0) {
-    res.status(400);
-    throw new Error("Request body is required");
-  }
-
-  if (blog.userId.toString() != req.user.id) {
-    res.status(403);
-    throw new Error("user don't have permission to update other blog");
+  if (blog.userId != req.user.id) {
+    throw new ApiError(403, "user don't have permission to update other blog");
   }
 
   const updatedBlog = await prisma.blog.update(
     {
-      where: { id: parseInt(id) },
+      where: { id: id },
       data: {
-        name: name ?? blog.name,
-        email: email ?? blog.email,
-        phone: phone ?? blog.phone,
+        ...(title && {title}),
+        ...(content && {content}),
+        ...(imageUrl && {imageUrl}),
       }
     }
   );
-  res.status(200).json(updatedBlog);
+  return successResponse(res, 200, "blog updated successfully", updatedBlog);
 });
 
 // @desc Delete blog posts
@@ -129,20 +129,20 @@ const updateBlog = asyncHandler(async (req, res) => {
 // @access Private
 const deleteBlog = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const blog = await prisma.blog.findUnique({ where: { id: parseInt(id) } });
+  if (!id) throw new ApiError(400, "Invalid blog id");
 
-  if (!blog) {
-    res.status(404);
-    return new Error("Blog not found");
+  const blog = await prisma.blog.findUnique({ where: { id: id } });
+
+  if(!blog) throw new ApiError(404, "Blog not found");
+
+  if (blog.userId != req.user.id) {
+    throw new ApiError(403, "user don't have permission to delete other blogs");
   }
 
-  if (blog.userId.toString() != req.user.id) {
-    res.status(403);
-    throw new Error("user don't have permission to delete other blog");
-  }
-
-  await prisma.blog.delete({ where: { id: parseInt(id) } });
-  res.status(200).json({ message: "Blog post deleted successfully", id: req.params.id });
+  await prisma.comment.deleteMany({where: {blogId: id}});
+  await prisma.like.deleteMany({where: {blogId: id}});
+  await prisma.blog.delete({ where: { id: id } });
+  return successResponse(res, 200, "Blog deleted successfully", {id: req.params.id });
 });
 
 module.exports = { getAllBlogs, postBlog, getBlog, updateBlog, deleteBlog };

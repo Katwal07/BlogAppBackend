@@ -9,8 +9,8 @@ router.post("/user/register", register);
 router.post("/user/login", login);
 router.post("/user/sent-otp", sendOtp);
 router.post("/user/verify", verify);
-router.post("/user/forgotPassword", forgotPassword);
-router.post("/user/resetPassword", resetPassword);
+router.put("/user/forgotPassword", forgotPassword);
+router.put("/user/resetPassword", resetPassword);
 router.get("/user/profile", validateToken, profile);
 router.put("/user/profile", validateToken, upload.single("avatar"), updateProfile)
 

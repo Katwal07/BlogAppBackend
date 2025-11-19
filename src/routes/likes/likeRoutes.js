@@ -5,6 +5,6 @@ const { toggleLike, getLikeCount } = require("../../controller/likes/likeControl
 const validateToken = require("../../middleware/validateTokenHandler");
 
 router.post("/toggleLike", validateToken, toggleLike);
-router.get("/getLikeCount/:id", getLikeCount);
+router.get("/getLikeCount/:id",validateToken, getLikeCount);
 
 module.exports = router;

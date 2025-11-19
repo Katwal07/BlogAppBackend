@@ -9,7 +9,7 @@ const upload = require("../../utils/imageUploadUtil");
 router.get("/getAllBlogs",validateToken, getAllBlogs);
 router.post("/postBlog", validateToken, upload.single('blogImage'), postBlog);
 router.get("/blog/:id", validateToken, getBlog);
-router.put("/blog/:id", validateToken, updateBlog);
+router.patch("/blog/:id", validateToken, updateBlog);
 router.delete("/blog/:id", validateToken, deleteBlog);
 
 module.exports = router;
